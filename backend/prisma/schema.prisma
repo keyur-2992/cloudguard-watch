@@ -1,0 +1,195 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  awsAccounts AwsAccount[]
+
+  @@map("users")
+}
+
+model AwsAccount {
+  id         String   @id @default(cuid())
+  userId     String
+  accountId  String   // AWS Account ID (12-digit number)
+  roleArn    String   // IAM Role ARN for cross-account access
+  externalId String   // External ID for additional security
+  name       String?  // User-friendly name (e.g., "Production", "Staging")
+  region     String?  // Primary AWS region
+  status     String   @default("connected") // connected, error, scanning
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resources Resource[]
+  cloudformationStacks CloudFormationStack[]
+  costEntries CostEntry[]
+  costSummaries CostSummary[]
+
+  // Constraints
+  @@unique([userId, accountId])
+  @@map("aws_accounts")
+}
+
+model Resource {
+  id           String   @id @default(cuid())
+  awsAccountId String
+  resourceId   String   // AWS Resource ID (e.g., i-1234567890abcdef0)
+  name         String
+  type         String   // EC2 Instance, Security Group, RDS Instance, etc.
+  region       String
+  status       String   @default("healthy") // healthy, warning, error
+  driftStatus  String   @default("none")    // none, drift, modified
+  lastModified DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  awsAccount AwsAccount @relation(fields: [awsAccountId], references: [id], onDelete: Cascade)
+  driftEvents DriftEvent[]
+
+  @@unique([awsAccountId, resourceId])
+  @@map("resources")
+}
+
+model DriftEvent {
+  id           String   @id @default(cuid())
+  resourceId   String
+  driftType    String   // configuration_change, parameter_change, tag_change
+  severity     String   // low, medium, high
+  description  String
+  status       String   @default("unresolved") // unresolved, investigating, resolved
+  changes      Json     // Array of change objects {field, from, to}
+  detectedAt   DateTime @default(now())
+  resolvedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@map("drift_events")
+}
+
+model CloudFormationStack {
+  id               String   @id @default(cuid())
+  awsAccountDbId   String   // References AwsAccount.id (internal DB ID)
+  awsAccountId     String   // AWS Account ID (12-digit number)
+  stackName        String
+  stackId          String   // AWS CloudFormation Stack ID
+  status           String   // CREATE_COMPLETE, UPDATE_COMPLETE, etc.
+  driftStatus      String?  // IN_SYNC, DRIFTED, NOT_CHECKED, UNKNOWN
+  driftDetectionId String?  // AWS drift detection operation ID
+  detectionTime    DateTime?
+  region           String
+  description      String?
+  tags             Json?    // Stack tags as JSON
+  outputs          Json?    // Stack outputs as JSON
+  parameters       Json?    // Stack parameters as JSON
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relationship to AWS account
+  awsAccount       AwsAccount @relation(fields: [awsAccountDbId], references: [id], onDelete: Cascade)
+
+  // Drift detection results
+  driftResults     StackDriftResult[]
+
+  @@unique([awsAccountId, stackName, region])
+  @@map("cloudformation_stacks")
+}
+
+model StackDriftResult {
+  id                    String   @id @default(cuid())
+  stackId               String
+  resourceLogicalId     String
+  resourceType          String
+  resourcePhysicalId    String?
+  driftStatus           String   // IN_SYNC, MODIFIED, DELETED, NOT_CHECKED
+  actualProperties      Json?    // Current resource properties
+  expectedProperties    Json?    // Expected resource properties
+  propertyDifferences   Json?    // Property differences array
+  createdAt             DateTime @default(now())
+
+  // Relationship to CloudFormation stack
+  stack                 CloudFormationStack @relation(fields: [stackId], references: [id], onDelete: Cascade)
+
+  @@unique([stackId, resourceLogicalId])
+  @@map("stack_drift_results")
+}
+
+model DriftDetectionJob {
+  id               String   @id @default(cuid())
+  awsAccountId     String
+  stackName        String
+  region           String
+  driftDetectionId String   @unique
+  status           String   // DETECTION_IN_PROGRESS, DETECTION_FAILED, DETECTION_COMPLETE
+  failureReason    String?
+  startedAt        DateTime @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("drift_detection_jobs")
+}
+
+model CostEntry {
+  id           String   @id @default(cuid())
+  awsAccountDbId String // References AwsAccount.id (internal DB ID)
+  awsAccountId String  // AWS Account ID (12-digit number)
+  date         DateTime // The date this cost entry is for
+  service      String   // AWS Service name (e.g., "Amazon EC2", "Amazon S3")
+  amount       Decimal  @db.Decimal(15, 4) // Cost amount with 4 decimal places
+  unit         String   // Currency unit (e.g., "USD")
+  granularity  String   // DAILY or MONTHLY
+  region       String?  // AWS region (optional)
+  usageType    String?  // Detailed usage type (optional)
+  operation    String?  // AWS operation (optional)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationship to AWS account
+  awsAccount   AwsAccount @relation(fields: [awsAccountDbId], references: [id], onDelete: Cascade)
+
+  // Ensure unique cost entries per account/date/service/granularity
+  @@unique([awsAccountId, date, service, granularity])
+  @@map("cost_entries")
+}
+
+model CostSummary {
+  id           String   @id @default(cuid())
+  awsAccountDbId String // References AwsAccount.id (internal DB ID) 
+  awsAccountId String  // AWS Account ID (12-digit number)
+  startDate    DateTime // Start date of the summary period
+  endDate      DateTime // End date of the summary period
+  granularity  String   // DAILY or MONTHLY
+  totalAmount  Decimal  @db.Decimal(15, 4) // Total cost for the period
+  unit         String   // Currency unit (e.g., "USD")
+  topServices  Json     // Top 5 services as JSON array
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationship to AWS account
+  awsAccount   AwsAccount @relation(fields: [awsAccountDbId], references: [id], onDelete: Cascade)
+
+  // Ensure unique summaries per account/period/granularity
+  @@unique([awsAccountId, startDate, endDate, granularity])
+  @@map("cost_summaries")
+}

@@ -38,7 +38,7 @@ const LandingPage = () => {
                 <Cloud className="w-6 h-6 text-white" />
               </div>
               <h1 className="text-2xl font-bold bg-gradient-aws bg-clip-text text-transparent">
-                CloudWatch Pro
+                CloudGuard
               </h1>
             </div>
             <div className="flex items-center gap-4">
@@ -138,7 +138,7 @@ const LandingPage = () => {
               <CardHeader>
                 <CardTitle>Ready to Get Started?</CardTitle>
                 <CardDescription>
-                  Join hundreds of DevOps teams monitoring their AWS infrastructure with CloudWatch Pro
+                  Join hundreds of DevOps teams monitoring their AWS infrastructure with CloudGuard
                 </CardDescription>
               </CardHeader>
               <CardContent>

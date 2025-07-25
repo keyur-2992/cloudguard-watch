@@ -2,8 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 
 // Pages
@@ -16,10 +16,86 @@ import Settings from "./pages/Settings";
 import Connect from "./pages/Connect";
 import NotFound from "./pages/NotFound";
 
-// Layout
-import Layout from "./components/Layout";
+// Components
+import ProtectedRoute from "./components/ProtectedRoute";
+import AuthLoading from "./components/AuthLoading";
 
 const queryClient = new QueryClient();
+
+// Main app routes component
+const AppRoutes = () => {
+  const { isLoaded, isSignedIn } = useAuth();
+
+  // Show loading state while Clerk is initializing
+  if (!isLoaded) {
+    return <AuthLoading />;
+  }
+
+  return (
+    <Routes>
+      {/* Public route - Landing page */}
+      <Route 
+        path="/" 
+        element={
+          isSignedIn ? <Navigate to="/dashboard" replace /> : <LandingPage />
+        } 
+      />
+      
+      {/* Protected routes - require authentication */}
+      <Route 
+        path="/dashboard" 
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/resources" 
+        element={
+          <ProtectedRoute>
+            <Resources />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/drift" 
+        element={
+          <ProtectedRoute>
+            <Drift />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/costs" 
+        element={
+          <ProtectedRoute>
+            <Costs />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/connect" 
+        element={
+          <ProtectedRoute>
+            <Connect />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/settings" 
+        element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Catch-all route for 404 */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -28,63 +104,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={
-              <>
-                <SignedOut>
-                  <LandingPage />
-                </SignedOut>
-                <SignedIn>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
-                </SignedIn>
-              </>
-            } />
-            <Route path="/dashboard" element={
-              <SignedIn>
-                <Layout>
-                  <Dashboard />
-                </Layout>
-              </SignedIn>
-            } />
-            <Route path="/resources" element={
-              <SignedIn>
-                <Layout>
-                  <Resources />
-                </Layout>
-              </SignedIn>
-            } />
-            <Route path="/drift" element={
-              <SignedIn>
-                <Layout>
-                  <Drift />
-                </Layout>
-              </SignedIn>
-            } />
-            <Route path="/costs" element={
-              <SignedIn>
-                <Layout>
-                  <Costs />
-                </Layout>
-              </SignedIn>
-            } />
-            <Route path="/connect" element={
-              <SignedIn>
-                <Layout>
-                  <Connect />
-                </Layout>
-              </SignedIn>
-            } />
-            <Route path="/settings" element={
-              <SignedIn>
-                <Layout>
-                  <Settings />
-                </Layout>
-              </SignedIn>
-            } />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
