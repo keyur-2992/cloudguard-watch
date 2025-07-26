@@ -38,7 +38,8 @@ CloudGuard is a modern SaaS application that provides comprehensive AWS infrastr
 ### **Prerequisites**
 - Node.js 18+ and npm
 - PostgreSQL 13+
-- AWS Account with IAM permissions
+- AWS Account with service credentials for CloudGuard backend
+- User AWS accounts with IAM roles for monitoring
 - Clerk account for authentication
 
 ### **1. Clone & Install**
@@ -262,10 +263,67 @@ cd frontend && npm run build
 - **Backend**: Railway, Render, AWS ECS, Docker containers
 - **Database**: AWS RDS, Supabase, Railway PostgreSQL
 
-## 📊 **AWS Permissions Required**
+## 🔐 **AWS Authentication Architecture**
 
-For proper functionality, connected AWS accounts need these IAM permissions:
+CloudGuard uses a secure **assume role** architecture where:
 
+1. **CloudGuard Service** has its own AWS credentials for the backend
+2. **User AWS Accounts** create IAM roles that trust the CloudGuard service
+3. **CloudGuard** assumes these user roles to access user resources
+4. **Users** retain full control and can revoke access anytime
+
+### **Security Benefits:**
+- ✅ Users control their own data and costs
+- ✅ CloudGuard cannot access user data without explicit permission
+- ✅ Users can audit all CloudGuard access in their CloudTrail logs
+- ✅ External ID provides additional security layer
+- ✅ Role sessions are temporary (1 hour) and automatically expire
+
+## 📊 **AWS Setup Instructions**
+
+### **For CloudGuard Backend Service:**
+
+Create a `.env` file in the `backend/` directory:
+
+```env
+# AWS Service Credentials (for CloudGuard backend)
+AWS_ACCESS_KEY_ID=your-cloudguard-service-access-key
+AWS_SECRET_ACCESS_KEY=your-cloudguard-service-secret-key
+AWS_DEFAULT_REGION=us-east-1
+
+# Other configuration...
+DATABASE_URL="postgresql://..."
+CLERK_SECRET_KEY="..."
+```
+
+### **For User AWS Accounts:**
+
+Each user needs to create an IAM role in their AWS account:
+
+#### **1. Create IAM Role**
+```bash
+aws iam create-role \
+  --role-name CloudGuardMonitoringRole \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": {
+          "AWS": "arn:aws:iam::YOUR-CLOUDGUARD-ACCOUNT:root"
+        },
+        "Action": "sts:AssumeRole",
+        "Condition": {
+          "StringEquals": {
+            "sts:ExternalId": "your-unique-external-id"
+          }
+        }
+      }
+    ]
+  }'
+```
+
+#### **2. Attach Required Permissions**
 ```json
 {
   "Version": "2012-10-17",
@@ -290,17 +348,35 @@ For proper functionality, connected AWS accounts need these IAM permissions:
 }
 ```
 
+#### **3. Connect in CloudGuard UI**
+- Role ARN: `arn:aws:iam::123456789012:role/CloudGuardMonitoringRole`
+- External ID: `your-unique-external-id`
+- Account Name: `Production` (optional)
+
 ## 🎯 **Getting Started Checklist**
 
+### **Development Setup**
 - [ ] **Prerequisites**: Node.js 18+, PostgreSQL, AWS account
 - [ ] **Clone repository** and install dependencies
-- [ ] **Set up environment variables** for both frontend and backend
 - [ ] **Configure Clerk** authentication with JWT templates
 - [ ] **Set up database** with Prisma migrations
-- [ ] **Create AWS IAM role** with required permissions
+- [ ] **Create backend `.env` file** with AWS service credentials
+- [ ] **Set up environment variables** for both frontend and backend
 - [ ] **Start development servers** and verify connectivity
-- [ ] **Test AWS connection** through the UI
-- [ ] **Explore features**: Dashboard, Resources, Drift, Costs
+
+### **AWS Configuration**
+- [ ] **CloudGuard Service**: Add AWS credentials to `backend/.env`
+- [ ] **User AWS Account**: Create IAM role with trust policy
+- [ ] **User AWS Account**: Attach monitoring permissions to role
+- [ ] **Test Connection**: Connect user AWS account via CloudGuard UI
+- [ ] **Verify Access**: Check resource monitoring and drift detection
+
+### **Production Deployment**
+- [ ] **Create dedicated AWS account** for CloudGuard service
+- [ ] **Configure production environment variables**
+- [ ] **Set up monitoring and logging**
+- [ ] **Enable HTTPS and security headers**
+- [ ] **Test assume role functionality** with production credentials
 
 ## 📚 **Documentation**
 

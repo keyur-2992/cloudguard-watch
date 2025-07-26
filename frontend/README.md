@@ -143,10 +143,11 @@ frontend/
 - **Updates**: Real-time data fetching with auto-refresh
 
 #### **🔗 Connect.tsx**
-- **Purpose**: AWS account connection interface
+- **Purpose**: AWS account connection interface using secure assume role architecture
 - **Features**: IAM role setup instructions, account form, validation
 - **Validation**: AWS Account ID, Role ARN, External ID validation
-- **Security**: Secure credential handling, no storage of AWS keys
+- **Security**: Cross-account role assumption, no storage of user AWS keys
+- **Architecture**: Users create IAM roles in their accounts that trust CloudGuard service
 
 #### **📦 Resources.tsx**
 - **Purpose**: AWS resource inventory and monitoring

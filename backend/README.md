@@ -67,10 +67,39 @@ LOG_LEVEL=info
 # CORS Configuration (comma-separated)
 ALLOWED_ORIGINS="http://localhost:3000,https://your-frontend-domain.com"
 
-# AWS Configuration (optional - uses IAM roles)
-# AWS_ACCESS_KEY_ID=""
-# AWS_SECRET_ACCESS_KEY=""
-# AWS_REGION="us-east-1"
+# AWS Service Credentials (Required for assume role functionality)
+AWS_ACCESS_KEY_ID=your-cloudguard-service-access-key
+AWS_SECRET_ACCESS_KEY=your-cloudguard-service-secret-key
+AWS_DEFAULT_REGION=us-east-1
+```
+
+#### **⚠️ Important: AWS Credentials Setup**
+
+The AWS credentials above are for the **CloudGuard service backend**, not user credentials. These credentials allow CloudGuard to assume roles in user AWS accounts.
+
+**For Development:**
+- Use your personal AWS credentials temporarily
+- Create a dedicated IAM user with only `sts:AssumeRole` permissions
+
+**For Production:**
+- Create a dedicated AWS account for the CloudGuard service
+- Or use IAM roles on AWS infrastructure (EC2, ECS, Lambda)
+- Never use personal credentials in production
+
+**Required IAM Policy for CloudGuard Service Account:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sts:AssumeRole"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
 ```
 
 ### **3. Database Setup**
@@ -580,11 +609,27 @@ async function verifyClerkToken(token: string) {
 }
 ```
 
-### **AWS Security**
+### **AWS Security & Architecture**
 
-#### **Cross-Account IAM Role Setup**
+CloudGuard implements a secure **assume role** architecture for multi-tenant AWS access:
 
-For secure AWS access, CloudGuard uses cross-account IAM role assumption:
+#### **How It Works:**
+1. **CloudGuard Service** has AWS credentials configured in environment variables
+2. **Users** create IAM roles in their own AWS accounts
+3. **Users** configure these roles to trust the CloudGuard service account
+4. **CloudGuard** uses STS to assume user roles when accessing their resources
+5. **All access** is logged in user's CloudTrail for full audit visibility
+
+#### **Security Benefits:**
+- ✅ **User Control**: Users retain full ownership of their data and costs
+- ✅ **Revocable Access**: Users can disable CloudGuard access anytime
+- ✅ **Audit Trail**: All CloudGuard actions logged in user's CloudTrail
+- ✅ **Temporary Credentials**: Role sessions expire after 1 hour
+- ✅ **External ID Security**: Additional security layer prevents confused deputy attacks
+
+#### **Cross-Account IAM Role Trust Policy**
+
+Users must create a role with this trust policy:
 
 ```json
 {
@@ -593,12 +638,12 @@ For secure AWS access, CloudGuard uses cross-account IAM role assumption:
     {
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::CLOUDGUARD_ACCOUNT:root"
+        "AWS": "arn:aws:iam::YOUR-CLOUDGUARD-ACCOUNT:root"
       },
       "Action": "sts:AssumeRole",
       "Condition": {
         "StringEquals": {
-          "sts:ExternalId": "unique-external-id-per-user"
+          "sts:ExternalId": "user-unique-external-id"
         }
       }
     }
